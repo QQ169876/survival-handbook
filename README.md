@@ -134,6 +134,22 @@
 本手册为科幻/应急情境下的技术整理，所有化学、医疗操作均有真实风险。
 **不得在现实中对人试用医疗部分**；发电、冶炼部分请遵守当地法律法规与安全规范。
 
+## 发布与版本管理
+
+本仓库同时维护 Gitee 与 GitHub 两个远端，**每次版本更新统一走一键脚本**：
+
+    python _build/publish.py -m "提交说明"
+
+脚本按固定顺序执行：提交 → 推送 Gitee（origin）与 GitHub（github）→ 两端各生成一个发行版，
+并删除两端的旧发行版（GitHub 端连同 tag 一起清理），**始终只保留与最新提交对应的那一个发行版**。
+
+版本号与发行说明自动取自本文件「## 更新日志」的第一条，因此**更新日志必须先写、再跑脚本**。
+
+- 预演（不改动远端）：python _build/publish.py --dry
+- 只提交不发布：python _build/publish.py --no-push -m "..."
+- 远端：Gitee https://gitee.com/big_head_mk/survival-handbook
+  GitHub https://github.com/QQ169876/survival-handbook
+
 ## 更新日志
 
 - 2026-09-21 v2.1 新增分册 29《酿酒与蒸馏工艺》（糖化发酵两步、酒曲与制曲霉变红线、黄酒全流程与煎酒、
