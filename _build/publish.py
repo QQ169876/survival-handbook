@@ -92,8 +92,18 @@ def gh_requests(method, path, data=None):
 
 # ---------- 版本与说明 ----------
 def read_changelog():
-    s = open(os.path.join(ROOT, "README.md"), encoding="utf-8").read()
-    seg = s.split("## 更新日志", 1)[1].strip().split("\n")
+    """取「更新日志」章节下的第一条条目（按行首的 ## 定位，避免正文里出现同样字样时误匹配）"""
+    lines = open(os.path.join(ROOT, "README.md"), encoding="utf-8").read().split("\n")
+    start = None
+    for i, ln in enumerate(lines):
+        if ln.strip() == "## 更新日志":
+            start = i + 1
+            break
+    if start is None:
+        return "vX.Y", "更新说明缺失", "（未在 README 中找到「## 更新日志」章节）"
+    seg = lines[start:]
+    while seg and not seg[0].strip():
+        seg.pop(0)
     first = []
     for idx, ln in enumerate(seg):
         if idx > 0 and ln.startswith("- "):
