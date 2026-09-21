@@ -15,9 +15,12 @@
 import os, sys, json, re, glob, subprocess, urllib.parse
 import urllib.request, urllib.error
 
-ROOT = r"D:\穿越生存手册"
-TOKEN_GITEE = r"C:\Users\maker\.gitee_token.json"
-TOKEN_GITHUB = r"C:\Users\maker\.github_token.json"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HOME = os.path.expanduser("~")
+# 凭据一律放在仓库外，脚本内不写死任何令牌、代理地址或用户名；
+# 支持用环境变量覆盖：GITEE_TOKEN / GITHUB_TOKEN / GITEE_TOKEN_FILE / GITHUB_TOKEN_FILE / GITHUB_PROXY
+TOKEN_GITEE = os.environ.get("GITEE_TOKEN_FILE") or os.path.join(HOME, ".gitee_token.json")
+TOKEN_GITHUB = os.environ.get("GITHUB_TOKEN_FILE") or os.path.join(HOME, ".github_token.json")
 GITEE_OWNER, GITEE_REPO = "big_head_mk", "survival-handbook"
 GITHUB_OWNER, GITHUB_REPO = "QQ169876", "survival-handbook"
 GITHUB_API = "https://api.github.com"
@@ -30,13 +33,41 @@ def sh(args, cwd=ROOT, env=None):
     return p.returncode, (p.stdout or "").strip(), (p.stderr or "").strip()
 
 
+# ---------- 凭据与脱敏 ----------
+def _load(path, key="token"):
+    try:
+        return json.load(open(path, encoding="utf-8"))
+    except Exception as e:
+        print("[错误] 读取凭据文件失败：%s（%s）" % (path, e))
+        return {}
+
+
 def gitee_token():
-    return json.load(open(TOKEN_GITEE, encoding="utf-8"))["token"]
+    return os.environ.get("GITEE_TOKEN") or _load(TOKEN_GITEE).get("token", "")
 
 
 def github_conf():
-    d = json.load(open(TOKEN_GITHUB, encoding="utf-8"))
-    return d["token"], d.get("proxy")
+    tok = os.environ.get("GITHUB_TOKEN") or _load(TOKEN_GITHUB).get("token", "")
+    proxy = os.environ.get("GITHUB_PROXY") or _load(TOKEN_GITHUB).get("proxy")
+    return tok, proxy
+
+
+def mask(text):
+    """输出前抹掉任何可能混进日志的令牌与代理串，避免终端/日志泄露凭据"""
+    if not text:
+        return ""
+    out = str(text)
+    for secret in filter(None, [os.environ.get("GITEE_TOKEN"), gitee_token(),
+                                os.environ.get("GITHUB_TOKEN")]):
+        out = out.replace(secret, "***")
+    try:
+        _, proxy = github_conf()
+        if proxy:
+            out = out.replace(proxy, "***")
+    except Exception:
+        pass
+    out = re.sub(r"(https?://)[^/@\s]+@", r"\1***@", out)
+    return out
 
 
 def gitee(method, path, data=None):
@@ -134,12 +165,43 @@ def release_body(block):
             f"未标注为史实或科学的数字一律视为经验值，须现场验证。")
 
 
+# ---------- 推送前自检：仓库内不得出现任何凭据/代理痕迹 ----------
+SECRET_PATTERNS = [
+    (r"gh[pousr]_[A-Za-z0-9]{20,}", "GitHub 令牌"),
+    (r"github_pat_[A-Za-z0-9_]{20,}", "GitHub 细粒度令牌"),
+    (re.escape("socks" + "5://") + r"[^\s\"']+", "SOCKS5 代理地址"),  # 拼接以免与自身源码匹配
+    (r"https?://[^\s/@]+:[^\s/@]+@github\.com", "内嵌凭据的推送地址"),
+    (r"access_token=[A-Za-z0-9]{8,}", "Gitee 令牌"),
+]
+SKIP_DIRS = {".git", "图片"}
+TEXT_EXT = {".md", ".py", ".txt", ".json", ".yml", ".yaml", ".cfg", ".ini", ".bat", ".ps1", ".sh"}
+
+
+def scan_secrets():
+    """推送前扫描：命中即中止，避免把凭据/代理配置推上公开仓库"""
+    bad = []
+    for dp, dn, fn in os.walk(ROOT):
+        dn[:] = [d for d in dn if d not in SKIP_DIRS]
+        for f in fn:
+            if os.path.splitext(f)[1].lower() not in TEXT_EXT:
+                continue
+            p = os.path.join(dp, f)
+            try:
+                s = open(p, encoding="utf-8", errors="ignore").read()
+            except Exception:
+                continue
+            for pat, name in SECRET_PATTERNS:
+                if re.search(pat, s):
+                    bad.append((os.path.relpath(p, ROOT), name))
+    return bad
+
+
 # ---------- 推送 ----------
 def push_gitee():
     code, out, err = sh(["git", "push", "origin", "main"])
     print("  Gitee push:", "OK" if code == 0 else "FAIL")
     if code != 0:
-        print("   ", err[:300])
+        print("   ", mask(err)[:300])
     return code == 0
 
 
@@ -153,7 +215,7 @@ def push_github():
     code, out, err = sh(args)
     print("  GitHub push:", "OK" if code == 0 else "FAIL")
     if code != 0:
-        print("   ", (err or out)[:400])
+        print("   ", mask(err or out)[:400])
     return code == 0
 
 
@@ -199,6 +261,15 @@ def main():
     if "-m" in args:
         i = args.index("-m")
         msg = args[i + 1] if i + 1 < len(args) else None
+
+    print("== 0. 凭据自检 ==")
+    bad = scan_secrets()
+    if bad:
+        print("  [中止] 仓库内发现疑似凭据/代理配置：")
+        for f, name in bad:
+            print("    -", f, "（%s）" % name)
+        print("  请先清理再发布；令牌与代理只能放在仓库外的 ~/.gitee_token.json、~/.github_token.json 或环境变量。")
+        return
 
     print("== 1. 提交 ==")
     code, out, _ = sh(["git", "status", "--porcelain"])
