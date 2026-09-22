@@ -28,14 +28,18 @@ EXTRA_OK = ('诗词', '小说', '经济', '电力')
 
 
 def volumes_on_disk():
-    """分册/ 目录下实际存在的册号 -> 文件名"""
+    """分册/ 各篇下实际存在的册号 -> 相对路径（编号 01~32 全局唯一，跨篇不变）"""
     out = {}
     if not os.path.isdir(VOL_DIR):
         return out
-    for f in sorted(os.listdir(VOL_DIR)):
-        m = re.match(r'(\d{2})_.*\.docx$', f)
-        if m and not f.startswith('~$'):
-            out[int(m.group(1))] = f
+    for dirpath, _dirs, files in os.walk(VOL_DIR):
+        for f in sorted(files):
+            if f.startswith('~$') or not f.endswith('.docx'):
+                continue
+            m = re.match(r'(\d{2})_.*\.docx$', f)
+            if m:
+                out[int(m.group(1))] = os.path.relpath(
+                    os.path.join(dirpath, f), ROOT).replace('\\', '/')
     return out
 
 
@@ -111,6 +115,12 @@ def main():
             problems.append('阶段编号不连续，缺：%s' % '、'.join(map(str, gap)))
 
     print('分册/ 目录：%d 册；速查表：%d 行' % (len(disk), len(rows)))
+    by_tier = {}
+    for n, p in sorted(disk.items()):
+        by_tier.setdefault(p.split('/')[1] if '/' in p else '分册', []).append(n)
+    for k in sorted(by_tier):
+        print('  %s：%d 册（%s）' % (k, len(by_tier[k]),
+                                '、'.join('%02d' % n for n in by_tier[k])))
     if problems:
         print('\n[不通过] 需要对使用顺序重新排序：')
         for p in problems:
