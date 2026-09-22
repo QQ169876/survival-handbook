@@ -3,3 +3,6 @@ __pycache__/
 *.pyo
 .DS_Store
 Thumbs.db
+
+# 文档生成脚本只在本地保留，不进仓库（属于构建工具，不是资料本体）
+_build/
