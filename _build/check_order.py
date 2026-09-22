@@ -6,10 +6,11 @@ check_order.py —— 校验《穿越生存手册》README 的「排序依据速
 
     python _build/check_order.py
 
-检查三件事：
+检查四件事：
   1. 分册/ 目录下的每个 docx，在速查表里是否都有对应行；
   2. 速查表里列出的册号，是否都能在 分册/ 目录里找到文件；
-  3. 速查表的阶段编号是否连续、无跳号（阶段 0~9 + 贯穿）。
+  3. 纯文本资料目录（诗词/、小说/、经济/）是否在速查表里有对应条目；
+  4. 速查表的阶段编号是否连续、无跳号（阶段 0~9 + 贯穿）。
 
 退出码 0 = 通过；1 = 有问题。
 """
@@ -22,8 +23,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 README = os.path.join(ROOT, 'README.md')
 VOL_DIR = os.path.join(ROOT, '分册')
 
-# 速查表允许出现的非数字条目（贯穿项）
-EXTRA_OK = ('诗词', '小说')
+# 速查表允许出现的非数字条目（纯文本资料目录，无需逐册列行）
+EXTRA_OK = ('诗词', '小说', '经济')
 
 
 def volumes_on_disk():
@@ -85,9 +86,16 @@ def main():
         problems.append('速查表里这些册号在 分册/ 目录找不到文件：%s'
                         % '、'.join('%02d' % n for n in ghost))
 
-    for k in ('诗词', '小说'):
-        if k not in rows and not any(k in str(x) for x in rows):
-            problems.append('速查表缺少贯穿项：%s/' % k)
+    # 纯文本资料目录：只要速查表里出现过该目录名即可，不必逐册列行
+    for d in EXTRA_OK:
+        if not os.path.isdir(os.path.join(ROOT, d)):
+            continue
+        n = len([f for f in os.listdir(os.path.join(ROOT, d))
+                 if f.endswith('.txt')])
+        if n and not any(d in str(k) for k in rows):
+            problems.append('纯文本资料目录 %s/（%d 个 txt）在速查表里没有条目' % (d, n))
+        else:
+            print('  %s/：%d 个 txt，速查表已收录' % (d, n))
 
     stages = set()
     for v in rows.values():
