@@ -24,7 +24,7 @@ README = os.path.join(ROOT, 'README.md')
 VOL_DIR = os.path.join(ROOT, '分册')
 
 # 速查表允许出现的非数字条目（纯文本资料目录，无需逐册列行）
-EXTRA_OK = ('诗词', '小说', '经济')
+EXTRA_OK = ('诗词', '小说', '经济', '电力')
 
 
 def volumes_on_disk():
