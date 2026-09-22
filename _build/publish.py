@@ -8,7 +8,7 @@
     python publish.py --dry              # 只打印将要执行的操作
 
 流程约定（以后每次版本更新都走这个脚本）：
-1. 版本号与发行说明自动取自 README「## 更新日志」的第一条
+1. 版本号与发行说明自动取自 CHANGELOG.md「# 更新日志」的第一条（先写日志，再跑脚本）
 2. 推送到 Gitee（origin）与 GitHub（github）两个远端
 3. 两端都只保留一个发行版：先删旧的全部 release（GitHub 连 tag 一起删），再按当前版本新建
 """
@@ -129,12 +129,20 @@ MAINTENANCE_KEYWORDS = ["脚本", "publish.py", "release.py", "gitignore", "__py
                         "凭据", "脱敏", "自检", "发行版", "推送", "仓库维护", "readme"]
 
 
+CHANGELOG_FILE = os.path.join(ROOT, "CHANGELOG.md")
+README_FILE = os.path.join(ROOT, "README.md")
+
+
 def changelog_blocks():
-    """解析「更新日志」章节，返回 [(版本号, 条目原文), ...]（按行首的 ## 与 - 定位）"""
-    lines = open(os.path.join(ROOT, "README.md"), encoding="utf-8").read().split("\n")
+    """解析「更新日志」章节，返回 [(版本号, 条目原文), ...]（按行首的标题与 - 定位）
+
+    日志已从 README 拆出到 CHANGELOG.md；若该文件不存在则回退到 README，兼容旧版本。
+    """
+    path = CHANGELOG_FILE if os.path.exists(CHANGELOG_FILE) else README_FILE
+    lines = open(path, encoding="utf-8").read().split("\n")
     start = None
     for i, ln in enumerate(lines):
-        if ln.strip() == "## 更新日志":
+        if ln.strip() in ("# 更新日志", "## 更新日志"):
             start = i + 1
             break
     if start is None:
@@ -170,7 +178,8 @@ def read_changelog():
     """当前版本号取自更新日志第一条；内容说明另行挑选"""
     blocks = changelog_blocks()
     if not blocks:
-        return "vX.Y", "更新说明缺失", "（未在 README 中找到「## 更新日志」章节）"
+        return "vX.Y", "更新说明缺失", "（未在 %s 中找到「更新日志」章节）" % os.path.basename(
+            CHANGELOG_FILE if os.path.exists(CHANGELOG_FILE) else README_FILE)
     ver, block = blocks[0]
     return ver, block.split("\n")[0].lstrip("- ").strip(), block
 
